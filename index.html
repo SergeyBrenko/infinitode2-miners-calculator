@@ -153,7 +153,7 @@ function render(){
   Object.keys(MINERS).forEach((key)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="icon-cell"><img src="${MINERS[key].icon}" alt="${key}" title="${key}"/></td>
+      <td class="icon-cell"><img src="${MINERS[key].icon}" alt="${key}" referrerpolicy="no-referrer" title="${key}"/></td>
       <td><input id="qty-${key}" type="number" min="0" step="1" value="0"/></td>
       <td><input id="alr-${key}" type="number" min="0" step="1" value="0"/></td>
       <td><div id="sub-${key}" class="total">0</div></td>
