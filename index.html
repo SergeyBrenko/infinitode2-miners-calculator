@@ -169,7 +169,7 @@ function render(){
     grand += subtotal;
   });
 
-  document.getElementById('grandTotal').textContent = fmt(grand + ' (' + (grand + 3500) + ')');
+  document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3500) + ')';
 
   // Events
   document.getElementById('commonLevel').addEventListener('change', ()=>{ recalc(); saveState(); });
@@ -188,7 +188,7 @@ function recalc(){
     document.querySelector(`#sub-${key}`).textContent = fmt(subtotal);
     grand += subtotal;
   }
-  document.getElementById('grandTotal').textContent = fmt(grand + ' (' + (grand + 3500) + ')');
+  document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3500) + ')';
 }
 
 // ------------------ Share ------------------
