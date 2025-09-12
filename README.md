@@ -1,0 +1,1 @@
+# infinitode2-miners-calculator
