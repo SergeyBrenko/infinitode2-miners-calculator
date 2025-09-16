@@ -1,260 +1,568 @@
 <!--
-  Infinitode 2 Miner Upgrade Cost Calculator (Single Section, Common Level)
-  All miners displayed in one table with icons.
-  Level picker is common for all miners.
+  Infinitode 2 Miner Calculator — Single Section, Common Target Level, Map Prefill, +/- Qty
+  - Target level numeric control (0..10) with +/- buttons.
+    * If target level == 0 → compute installation (build) price using +60% step-up per miner of same type (floored each step).
+    * If target level >= 1 → compute upgrade price from (level-1 → level) using +25% step-up per additional upgrade from that level (floored each step).
+  - One table with all miners (icons), Qty with -/+ buttons, Subtotal per miner, Grand total.
+  - Map selector including "custom". When a map is selected, prefill miner quantities from MAP_SUGGESTIONS; "custom" sets all qty to 0.
+  - LocalStorage persistence: targetLevel, selectedMap, per-miner qty.
+  - Minimal tests included (open DevTools console).
 -->
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Infinitode 2 — Miner Upgrade Cost Calculator</title>
-  <style>
-    :root{
-      --bg:#0b0f16; --panel:#111827; --muted:#9ca3af; --accent:#22d3ee; --text:#e5e7eb; --ok:#34d399; --warn:#fbbf24;
-      --radius:16px;
-    }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
-    .wrap{max-width:720px;margin:0 auto;padding:24px;}
-    header{margin-bottom:20px}
-    h1{font-size:1.25rem;margin:0;letter-spacing:0.2px}
-    .card{background:var(--panel);border-radius:var(--radius);padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.3);margin-bottom:16px}
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Infinitode 2 — Miner Cost Calculator</title>
+    <style>
+        :root {
+            --bg: #0b0f16;
+            --panel: #111827;
+            --muted: #9ca3af;
+            --accent: #22d3ee;
+            --text: #e5e7eb;
+            --ok: #34d399;
+            --warn: #fbbf24;
+            --radius: 16px;
+        }
 
-    label{font-size:.85rem;color:#cbd5e1;display:block;margin-bottom:6px}
-    select,input[type="number"]{width:100%;background:#0f172a;border:1px solid rgba(255,255,255,.08);color:var(--text);padding:8px 10px;border-radius:10px;font:inherit}
-    select:focus,input[type="number"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.18)}
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+        }
 
-    table{width:100%;border-collapse:collapse;font-size:.92rem}
-    th,td{padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.08);text-align:right}
-    th:first-child,td:first-child{text-align:left}
-    .icon-cell img{width:36px;height:36px;border-radius:8px;object-fit:contain;background:#0f172a}
+        .wrap {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 24px
+        }
 
-    .total{font-weight:800}
-    .sum{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:12px}
-    .sum .label{color:var(--muted)}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
-    button{cursor:pointer;background:#0f172a;border:1px solid rgba(255,255,255,.08);color:var(--text);padding:8px 12px;border-radius:10px;font:inherit}
-    button:hover{border-color:var(--accent)}
-    .accent{background:linear-gradient(90deg, #22d3ee, #34d399);border:none;color:#0b0f16;font-weight:800}
+        .card {
+            background: var(--panel);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+            margin-bottom: 16px
+        }
 
-    footer{margin-top:20px;color:var(--muted);font-size:.85rem}
-    .note{color:var(--warn)}
-  </style>
+        h1 {
+            font-size: 1.2rem;
+            margin: 0 0 12px
+        }
+
+        label {
+            font-size: .85rem;
+            color: #cbd5e1;
+            display: block;
+            margin-bottom: 6px
+        }
+
+        select, input[type="number"] {
+            background: #0f172a;
+            border: 1px solid rgba(255, 255, 255, .08);
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 10px;
+            font: inherit
+        }
+
+        select:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(34, 211, 238, .18)
+        }
+
+        .level-ctrl {
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .level-ctrl input[type="number"] {
+            width: 90px;
+            text-align: center
+        }
+
+        .btn {
+            cursor: pointer;
+            background: #0f172a;
+            border: 1px solid rgba(255, 255, 255, .08);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 10px;
+            font: inherit
+        }
+
+        .btn:hover {
+            border-color: var(--accent)
+        }
+
+        .btn.primary {
+            background: linear-gradient(90deg, #22d3ee, #34d399);
+            border: none;
+            color: #0b0f16;
+            font-weight: 800
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .92rem
+        }
+
+        th, td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            text-align: right
+        }
+
+        th:first-child, td:first-child {
+            text-align: left
+        }
+
+        .icon-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .icon-cell img {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            object-fit: contain;
+            background: #0f172a
+        }
+
+        .qty-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-end
+        }
+
+        .qty-ctrl input {
+            width: 80px;
+            text-align: center
+        }
+
+        .total {
+            font-weight: 800
+        }
+
+        .sum {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            align-items: center;
+            margin-top: 12px
+        }
+
+        .sum .label {
+            color: var(--muted)
+        }
+
+        footer {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: .85rem
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Infinitode 2 — Miner Upgrade Cost Calculator</h1>
-    </header>
-
+<div class="wrap">
     <div class="card">
-      <label for="commonLevel">Upgrade Level (applies to all miners)</label>
-      <select id="commonLevel"></select>
+        <h1>Infinitode 2 — Miner Cost Calculator</h1>
+        <div class="level-ctrl">
+            <div>
+                <label for="targetLevel">Target level (0 = install)</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn" id="decLevel">−</button>
+                    <input id="targetLevel" type="number" min="0" max="10" step="1" value="0"/>
+                    <button class="btn" id="incLevel">+</button>
+                </div>
+            </div>
+            <div style="margin-left:auto">
+                <label for="mapSelect">Map</label>
+                <select id="mapSelect"></select>
+            </div>
+        </div>
     </div>
 
     <div class="card" id="app"></div>
 
     <div class="card">
-      <div class="sum"><span class="label">Grand total:</span> <span class="total" id="grandTotal">0</span></div>
-      <div class="toolbar" style="margin-top:10px">
-        <button id="resetBtn">Reset</button>
-        <button class="accent" id="shareBtn">Share setup</button>
-      </div>
-      <footer>
-        <p>Pricing rule used: each additional <b>upgrade from the same level</b> for a miner type costs <b>+25% multiplicative</b>, <b>floored each step</b>. Build price step-up (+60%) is <u>not</u> included.</p>
-      </footer>
+        <div class="sum"><span class="label">Grand total:</span> <span class="total" id="grandTotal">0</span></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn" id="resetBtn">Reset</button>
+            <button class="btn primary" id="shareBtn">Share setup</button>
+        </div>
+        <footer>
+            <p>Rules: Install cost uses <b>+60%</b> multiplicative step-up per additional miner of the same type placed;
+                upgrade cost uses <b>+25%</b> multiplicative step-up per additional upgrade from the same level. Each
+                step is <b>floored</b>. Target level 0 ⇒ install; 1..10 ⇒ upgrade to that level.</p>
+        </footer>
     </div>
-  </div>
+</div>
 
 <script>
-// ------------------ Data ------------------
-// Miner icons and base upgrade costs (coins) for upgrading L→L+1, levels 0..9
-const MINERS = {
-  'SCL1-R': { upgrades:[150,400,1000,1500,2100,2800,3700,4800,6000,8000], icon:'https://static.wikia.nocookie.net/infinitode-2/images/7/73/Miner-Scalar.png/revision/latest/scale-to-width-down/500?cb=20190325230257' },
-  'V2-CTR': { upgrades:[170,500,1200,1750,2300,3100,4300,5700,7200,9600], icon:'https://static.wikia.nocookie.net/infinitode-2/images/2/20/Miner-Vector.png/revision/latest/scale-to-width-down/500?cb=20190325230257' },
-  'MTRX-3': { upgrades:[185,600,1400,2000,2500,3400,5000,6600,8400,11000], icon:'https://static.wikia.nocookie.net/infinitode-2/images/6/69/Miner-Matrix.png/revision/latest/scale-to-width-down/500?cb=20190325230256' },
-  'TN4S-R': { upgrades:[240,750,1800,2400,2900,4000,5800,7400,9500,12500], icon:'https://static.wikia.nocookie.net/infinitode-2/images/1/14/Miner-Tensor.png/revision/latest/scale-to-width-down/500?cb=20190325230257' },
-  'IN5-AR': { upgrades:[250,875,1900,2600,3500,5100,6600,8800,11000,14000], icon:'https://static.wikia.nocookie.net/infinitode-2/images/9/9c/Miner-Infiar.png/revision/latest/scale-to-width-down/500?cb=20190325230255' },
-};
+    // =============== Data ===============
+    const MINERS = {
+        'SCL1-R': {
+            build: 120,
+            upgrades: [150, 400, 1000, 1500, 2100, 2800, 3700, 4800, 6000, 8000],
+            icon: 'https://static.wikia.nocookie.net/infinitode-2/images/7/73/Miner-Scalar.png/revision/latest/scale-to-width-down/500?cb=20190325230257'
+        },
+        'V2-CTR': {
+            build: 140,
+            upgrades: [170, 500, 1200, 1750, 2300, 3100, 4300, 5700, 7200, 9600],
+            icon: 'https://static.wikia.nocookie.net/infinitode-2/images/2/20/Miner-Vector.png/revision/latest/scale-to-width-down/500?cb=20190325230257'
+        },
+        'MTRX-3': {
+            build: 170,
+            upgrades: [185, 600, 1400, 2000, 2500, 3400, 5000, 6600, 8400, 11000],
+            icon: 'https://static.wikia.nocookie.net/infinitode-2/images/6/69/Miner-Matrix.png/revision/latest/scale-to-width-down/500?cb=20190325230256'
+        },
+        'TN4S-R': {
+            build: 185,
+            upgrades: [240, 750, 1800, 2400, 2900, 4000, 5800, 7400, 9500, 12500],
+            icon: 'https://static.wikia.nocookie.net/infinitode-2/images/1/14/Miner-Tensor.png/revision/latest/scale-to-width-down/500?cb=20190325230257'
+        },
+        'IN5-AR': {
+            build: 200,
+            upgrades: [250, 875, 1900, 2600, 3500, 5100, 6600, 8800, 11000, 14000],
+            icon: 'https://static.wikia.nocookie.net/infinitode-2/images/9/9c/Miner-Infiar.png/revision/latest/scale-to-width-down/500?cb=20190325230255'
+        },
+    };
+    // If you prefer remote icons, swap src to absolute URLs and add referrerpolicy="no-referrer" on <img> in render()
 
-const UPGRADE_MULTIPLIER = 1.25; // +25% per additional upgrade from same level
-const fmt = (n)=> n.toLocaleString(undefined, {maximumFractionDigits:0});
+    const BUILD_STEP = 1.60;   // +60% per additional build of same miner
+    const UPG_STEP = 1.25;   // +25% per additional upgrade from same level
+    const fmt = (n) => n.toLocaleString(undefined, {maximumFractionDigits: 0});
 
-// ------------------ Persistence ------------------
-const storageKey = 'inf2-miner-upgrade-single-v3';
-function saveState(){
-  const data = { commonLevel: Number(document.querySelector('#commonLevel')?.value || 0), miners: {} };
-  for (const key of Object.keys(MINERS)){
-    const qty = Number(document.querySelector(`#qty-${key}`)?.value || 0);
-    const already = Number(document.querySelector(`#alr-${key}`)?.value || 0);
-    data.miners[key] = { qty, already };
-  }
-  localStorage.setItem(storageKey, JSON.stringify(data));
-}
-function loadState(){
-  try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
-  catch { return {}; }
-}
+    // Maps list and suggested max quantities per miner.
+    // NOTE: Placeholder suggestions — please confirm/adjust. "custom" sets all to 0.
+    const MAPS = [
+        'custom',
+        '1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8', '1.b1',
+        '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.b1',
+        '3.1', '3.2', '3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.b1',
+        '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.b1',
+        '5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '5.7', '5.8', '5.b1', '5.b2',
+        '6.1', '6.2', '6.3', '6.4', '6.5', '6.6',
+        'rumble', 'dev'
+    ];
+    const MAP_SUGGESTIONS = {
+        custom: {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 0},
+        // Conservative example suggestions; please provide precise caps per map.
+        '1.1': {'SCL1-R': 3, 'V2-CTR': 0, 'MTRX-3': 1, 'TN4S-R': 0, 'IN5-AR': 1},
+        '1.2': {'SCL1-R': 2, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 2, 'IN5-AR': 1},
+        '1.3': {'SCL1-R': 1, 'V2-CTR': 2, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 3},
+        '1.4': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 1, 'IN5-AR': 3},
+        '1.5': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 2, 'IN5-AR': 1},
+        '1.6': {'SCL1-R': 2, 'V2-CTR': 3, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 0},
+        '1.7': {'SCL1-R': 1, 'V2-CTR': 3, 'MTRX-3': 0, 'TN4S-R': 1, 'IN5-AR': 1},
+        '1.8': {'SCL1-R': 2, 'V2-CTR': 2, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 1},
+        '1.b1': {'SCL1-R': 1, 'V2-CTR': 0, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 1},
+        '2.1': {'SCL1-R': 1, 'V2-CTR': 2, 'MTRX-3': 1, 'TN4S-R': 1, 'IN5-AR': 1},
+        '2.2': {'SCL1-R': 1, 'V2-CTR': 0, 'MTRX-3': 3, 'TN4S-R': 1, 'IN5-AR': 1},
+        '2.3': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 3, 'TN4S-R': 1, 'IN5-AR': 0},
+        '2.4': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 4, 'TN4S-R': 0, 'IN5-AR': 1},
+        '2.5': {'SCL1-R': 0, 'V2-CTR': 1, 'MTRX-3': 4, 'TN4S-R': 0, 'IN5-AR': 1},
+        '2.6': {'SCL1-R': 0, 'V2-CTR': 2, 'MTRX-3': 2, 'TN4S-R': 1, 'IN5-AR': 2},
+        '2.7': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 2, 'TN4S-R': 0, 'IN5-AR': 3},
+        '2.8': {'SCL1-R': 1, 'V2-CTR': 3, 'MTRX-3': 3, 'TN4S-R': 0, 'IN5-AR': 0},
+        '2.b1': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 0},
+        '3.1': {'SCL1-R': 1, 'V2-CTR': 2, 'MTRX-3': 2, 'TN4S-R': 0, 'IN5-AR': 2},
+        '3.2': {'SCL1-R': 1, 'V2-CTR': 4, 'MTRX-3': 2, 'TN4S-R': 0, 'IN5-AR': 0},
+        '3.3': {'SCL1-R': 2, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 3, 'IN5-AR': 1},
+        '3.4': {'SCL1-R': 0, 'V2-CTR': 3, 'MTRX-3': 2, 'TN4S-R': 1, 'IN5-AR': 0},
+        '3.5': {'SCL1-R': 2, 'V2-CTR': 3, 'MTRX-3': 1, 'TN4S-R': 0, 'IN5-AR': 0},
+        '3.6': {'SCL1-R': 3, 'V2-CTR': 0, 'MTRX-3': 1, 'TN4S-R': 3, 'IN5-AR': 0},
+        '3.7': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 5, 'TN4S-R': 0, 'IN5-AR': 1},
+        '3.8': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 2, 'TN4S-R': 3, 'IN5-AR': 2},
+        '3.b1': {'SCL1-R': 1, 'V2-CTR': 2, 'MTRX-3': 0, 'TN4S-R': 1, 'IN5-AR': 1},
+        '4.1': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 3, 'TN4S-R': 3, 'IN5-AR': 5},
+        '4.2': {'SCL1-R': 0, 'V2-CTR': 1, 'MTRX-3': 3, 'TN4S-R': 2, 'IN5-AR': 3},
+        '4.3': {'SCL1-R': 1, 'V2-CTR': 3, 'MTRX-3': 1, 'TN4S-R': 2, 'IN5-AR': 3},
+        '4.4': {'SCL1-R': 1, 'V2-CTR': 3, 'MTRX-3': 2, 'TN4S-R': 1, 'IN5-AR': 3},
+        '4.5': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 2, 'TN4S-R': 3, 'IN5-AR': 2},
+        '4.6': {'SCL1-R': 2, 'V2-CTR': 1, 'MTRX-3': 3, 'TN4S-R': 1, 'IN5-AR': 3},
+        '4.7': {'SCL1-R': 1, 'V2-CTR': 3, 'MTRX-3': 3, 'TN4S-R': 1, 'IN5-AR': 2},
+        '4.8': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 2, 'TN4S-R': 4, 'IN5-AR': 2},
+        '4.b1': {'SCL1-R': 1, 'V2-CTR': 0, 'MTRX-3': 2, 'TN4S-R': 2, 'IN5-AR': 3},
+        '5.1': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 3, 'TN4S-R': 2, 'IN5-AR': 5},
+        '5.2': {'SCL1-R': 1, 'V2-CTR': 0, 'MTRX-3': 1, 'TN4S-R': 1, 'IN5-AR': 7},
+        '5.3': {'SCL1-R': 1, 'V2-CTR': 2, 'MTRX-3': 4, 'TN4S-R': 0, 'IN5-AR': 8},
+        '5.4': {'SCL1-R': 0, 'V2-CTR': 1, 'MTRX-3': 0, 'TN4S-R': 1, 'IN5-AR': 8},
+        '5.5': {'SCL1-R': 4, 'V2-CTR': 2, 'MTRX-3': 0, 'TN4S-R': 3, 'IN5-AR': 4},
+        '5.6': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 2, 'TN4S-R': 3, 'IN5-AR': 4},
+        '5.7': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 1, 'TN4S-R': 4, 'IN5-AR': 5},
+        '5.8': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 1, 'TN4S-R': 2, 'IN5-AR': 5},
+        '5.b1': {'SCL1-R': 4, 'V2-CTR': 4, 'MTRX-3': 2, 'TN4S-R': 2, 'IN5-AR': 4},
+        '5.b2': {'SCL1-R': 4, 'V2-CTR': 4, 'MTRX-3': 0, 'TN4S-R': 2, 'IN5-AR': 4},
+        '6.1': {'SCL1-R': 2, 'V2-CTR': 1, 'MTRX-3': 1, 'TN4S-R': 1, 'IN5-AR': 3},
+        '6.2': {'SCL1-R': 3, 'V2-CTR': 0, 'MTRX-3': 0, 'TN4S-R': 1, 'IN5-AR': 3},
+        '6.3': {'SCL1-R': 2, 'V2-CTR': 0, 'MTRX-3': 4, 'TN4S-R': 4, 'IN5-AR': 4},
+        '6.4': {'SCL1-R': 1, 'V2-CTR': 0, 'MTRX-3': 2, 'TN4S-R': 2, 'IN5-AR': 4},
+        '6.5': {'SCL1-R': 0, 'V2-CTR': 4, 'MTRX-3': 0, 'TN4S-R': 0, 'IN5-AR': 4},
+        '6.6': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 4, 'TN4S-R': 1, 'IN5-AR': 1},
+        'rumble': {'SCL1-R': 1, 'V2-CTR': 1, 'MTRX-3': 1, 'TN4S-R': 1, 'IN5-AR': 4},
+        'dev': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 3, 'TN4S-R': 5, 'IN5-AR': 8}
+    };
 
-// ------------------ Math ------------------
-function costBatch(minerKey, level, qty, already){
-  const base = MINERS[minerKey].upgrades[level];
-  let sum = 0;
-  for(let i=0;i<qty;i++){
-    const stepIndex = already + i;
-    sum += Math.floor(base * Math.pow(UPGRADE_MULTIPLIER, stepIndex));
-  }
-  return sum;
-}
+    // =============== Persistence ===============
+    const storageKey = 'inf2-miner-calc-v4';
 
-// ------------------ UI ------------------
-function ensureLevelOptions(){
-  const sel = document.getElementById('commonLevel');
-  if(!sel) return;
-  if(sel.options.length === 0){
-    for(let l=0;l<10;l++){
-      const opt = document.createElement('option');
-      opt.value = String(l);
-      opt.textContent = `${l}→${l+1}`;
-      sel.appendChild(opt);
+    function saveState() {
+        const data = {
+            targetLevel: clampLevel(Number(document.querySelector('#targetLevel')?.value || 0)),
+            map: document.querySelector('#mapSelect')?.value || 'custom',
+            miners: {}
+        };
+        for (const key of Object.keys(MINERS)) {
+            const qty = Number(document.querySelector(`#qty-${key}`)?.value || 0);
+            data.miners[key] = {qty};
+        }
+        localStorage.setItem(storageKey, JSON.stringify(data));
     }
-  }
-}
 
-function render(){
-  const state = loadState();
-  const app = document.getElementById('app');
-  app.innerHTML = '';
+    function loadState() {
+        try {
+            return JSON.parse(localStorage.getItem(storageKey) || '{}');
+        } catch {
+            return {};
+        }
+    }
 
-  ensureLevelOptions();
-  const levelSel = document.getElementById('commonLevel');
-  if(levelSel) levelSel.value = String(state?.commonLevel ?? 0);
+    // =============== Calculations ===============
+    function clampLevel(n) {
+        return Math.max(0, Math.min(10, isFinite(n) ? Math.round(n) : 0));
+    }
 
-  let grand = 0;
+    function buildCostFor(minerKey, qty) {
+        const base = MINERS[minerKey].build;
+        let sum = 0;
+        for (let i = 0; i < qty; i++) sum += Math.floor(base * Math.pow(BUILD_STEP, i));
+        return sum;
+    }
 
-  // Build one table containing all miners
-  const table = document.createElement('table');
-  table.innerHTML = `
+    function upgradeCostFor(minerKey, targetLevel, qty) {
+        // targetLevel in 1..10 → uses upgrades[targetLevel-1]
+        const base = MINERS[minerKey].upgrades[targetLevel - 1];
+        let sum = 0;
+        for (let i = 0; i < qty; i++) sum += Math.floor(base * Math.pow(UPG_STEP, i));
+        return sum;
+    }
+
+    // =============== UI ===============
+    function ensureMaps() {
+        const sel = document.getElementById('mapSelect');
+        if (!sel) return;
+        if (sel.options.length === 0) {
+            MAPS.forEach(m => {
+                const o = document.createElement('option');
+                o.value = m;
+                o.textContent = m;
+                sel.appendChild(o);
+            });
+        }
+    }
+
+    function render() {
+        const state = loadState();
+        ensureMaps();
+
+        const levelInput = document.getElementById('targetLevel');
+        const mapSel = document.getElementById('mapSelect');
+        levelInput.value = String(clampLevel(state?.targetLevel ?? 0));
+        mapSel.value = state?.map || 'custom';
+
+        const app = document.getElementById('app');
+        app.innerHTML = '';
+
+        const table = document.createElement('table');
+        table.innerHTML = `
     <thead>
       <tr>
         <th>Miner</th>
         <th>Qty</th>
-        <th>Already</th>
         <th>Subtotal</th>
       </tr>
     </thead>
     <tbody id="minerBody"></tbody>
   `;
-  app.appendChild(table);
+        app.appendChild(table);
 
-  const tbody = table.querySelector('#minerBody');
-  const currentLevel = Number(document.getElementById('commonLevel')?.value || 0);
-
-  Object.keys(MINERS).forEach((key)=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="icon-cell"><img src="${MINERS[key].icon}" alt="${key}" referrerpolicy="no-referrer" title="${key}"/></td>
-      <td><input id="qty-${key}" type="number" min="0" step="1" value="0"/></td>
-      <td><input id="alr-${key}" type="number" min="0" step="1" value="0"/></td>
+        const tbody = table.querySelector('#minerBody');
+        Object.keys(MINERS).forEach((key) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+      <td class="icon-cell"><img referrerpolicy="no-referrer" src="${MINERS[key].icon}" alt="${key}" title="${key}"/> ${key}</td>
+      <td>
+        <div class="qty-ctrl">
+          <button class="btn" data-dec="${key}">−</button>
+          <input id="qty-${key}" type="number" min="0" step="1" value="0"/>
+          <button class="btn" data-inc="${key}">+</button>
+        </div>
+      </td>
       <td><div id="sub-${key}" class="total">0</div></td>
     `;
-    tbody.appendChild(tr);
+            tbody.appendChild(tr);
 
-    const s = state?.miners?.[key] || { qty:0, already:0 };
-    tr.querySelector(`#qty-${key}`).value = s.qty;
-    tr.querySelector(`#alr-${key}`).value = s.already;
+            // Restore qty
+            const q = Number(state?.miners?.[key]?.qty ?? 0);
+            tr.querySelector(`#qty-${key}`).value = q;
+        });
 
-    const subtotal = costBatch(key, currentLevel, s.qty, s.already);
-    tr.querySelector(`#sub-${key}`).textContent = fmt(subtotal);
-    grand += subtotal;
-  });
+        // Prefill by map selection
+        applyMapPrefill(mapSel.value, /*overwrite=*/false);
 
-  document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3500) + ')';
+        // Initial calc
+        recalc();
 
-  // Events
-  document.getElementById('commonLevel').addEventListener('change', ()=>{ recalc(); saveState(); });
-  app.querySelectorAll('input[type="number"]').forEach(el=>{
-    el.addEventListener('input', ()=>{ recalc(); saveState(); });
-  });
-}
+        // Events
+        document.getElementById('decLevel').addEventListener('click', () => {
+            levelInput.value = String(clampLevel(Number(levelInput.value) - 1));
+            recalc();
+            saveState();
+        });
+        document.getElementById('incLevel').addEventListener('click', () => {
+            levelInput.value = String(clampLevel(Number(levelInput.value) + 1));
+            recalc();
+            saveState();
+        });
+        levelInput.addEventListener('input', () => {
+            levelInput.value = String(clampLevel(Number(levelInput.value)));
+            recalc();
+            saveState();
+        });
 
-function recalc(){
-  let grand = 0;
-  const level = Number(document.querySelector('#commonLevel').value || 0);
-  for(const key of Object.keys(MINERS)){
-    const qty = Number(document.querySelector(`#qty-${key}`).value || 0);
-    const alr = Number(document.querySelector(`#alr-${key}`).value || 0);
-    const subtotal = costBatch(key, level, qty, alr);
-    document.querySelector(`#sub-${key}`).textContent = fmt(subtotal);
-    grand += subtotal;
-  }
-  document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3500) + ')';
-}
+        document.querySelectorAll('[data-dec]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-dec');
+                const inp = document.getElementById(`qty-${key}`);
+                inp.value = String(Math.max(0, Number(inp.value || 0) - 1));
+                recalc();
+                saveState();
+            });
+        });
+        document.querySelectorAll('[data-inc]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-inc');
+                const inp = document.getElementById(`qty-${key}`);
+                inp.value = String(Math.max(0, Number(inp.value || 0) + 1));
+                recalc();
+                saveState();
+            });
+        });
+        app.querySelectorAll('input[type="number"]').forEach(inp => {
+            inp.addEventListener('input', () => {
+                inp.value = String(Math.max(0, Math.round(Number(inp.value) || 0)));
+                recalc();
+                saveState();
+            });
+        });
 
-// ------------------ Share ------------------
-function encodeShare(){
-  const data = { commonLevel: Number(document.querySelector('#commonLevel').value || 0), miners: {} };
-  for(const key of Object.keys(MINERS)){
-    const qty = Number(document.querySelector(`#qty-${key}`).value || 0);
-    const already = Number(document.querySelector(`#alr-${key}`).value || 0);
-    data.miners[key] = { qty, already };
-  }
-  return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-}
-function decodeShare(str){
-  try{ return JSON.parse(decodeURIComponent(escape(atob(str)))); }catch{ return null; }
-}
+        mapSel.addEventListener('change', () => {
+            applyMapPrefill(mapSel.value, /*overwrite=*/true);
+            recalc();
+            saveState();
+        });
+    }
 
-// ------------------ Init ------------------
-render();
-recalc();
+    function applyMapPrefill(map, overwrite) {
+        const caps = MAP_SUGGESTIONS[map];
+        if (!caps) return; // if not defined, do nothing
+        for (const key of Object.keys(MINERS)) {
+            const inp = document.getElementById(`qty-${key}`);
+            if (!inp) continue;
+            if (overwrite || Number(inp.value || 0) === 0) {
+                const v = Number(caps[key] ?? 0);
+                inp.value = String(Math.max(0, Math.round(v)));
+            }
+        }
+    }
 
-// Controls
- document.getElementById('resetBtn').addEventListener('click', ()=>{
-   localStorage.removeItem(storageKey);
-   render();
-   recalc();
- });
- document.getElementById('shareBtn').addEventListener('click', ()=>{
-   const token = encodeShare();
-   const url = location.origin + location.pathname + '#'+token;
-   navigator.clipboard.writeText(url).then(()=>{ alert('Sharable link copied to clipboard!'); });
- });
+    function recalc() {
+        const level = clampLevel(Number(document.querySelector('#targetLevel').value || 0));
+        let grand = 0;
+        for (const key of Object.keys(MINERS)) {
+            const qty = Number(document.querySelector(`#qty-${key}`).value || 0);
+            const sub = (level === 0) ? buildCostFor(key, qty) : upgradeCostFor(key, level, qty);
+            document.querySelector(`#sub-${key}`).textContent = fmt(sub);
+            grand += sub;
+        }
+        document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3334) + ')';
+    }
 
- // Load from hash if present
- if(location.hash && location.hash.length>1){
-   const data = decodeShare(location.hash.slice(1));
-   if(data){
-     const levelSel = document.querySelector('#commonLevel');
-     if(levelSel) levelSel.value = data.commonLevel || 0;
-     if(data.miners){
-       for(const key of Object.keys(MINERS)){
-         const s = data.miners[key];
-         if(s){
-           const qty = document.querySelector(`#qty-${key}`);
-           const alr = document.querySelector(`#alr-${key}`);
-           if(qty) qty.value = s.qty || 0;
-           if(alr) alr.value = s.already || 0;
-         }
-       }
-     }
-     saveState();
-     recalc();
-   }
- }
+    // Share helpers
+    function encodeShare() {
+        const data = {
+            targetLevel: clampLevel(Number(document.querySelector('#targetLevel').value || 0)),
+            map: document.querySelector('#mapSelect').value,
+            miners: {}
+        };
+        for (const key of Object.keys(MINERS)) {
+            data.miners[key] = {qty: Number(document.querySelector(`#qty-${key}`).value || 0)};
+        }
+        return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+    }
 
-// ------------------ Minimal Tests ------------------
-(function runTests(){
-  // Base sanity: SCL1-R L0 base=150; three upgrades with already=0 => 150 + floor(187.5) + floor(234.375) = 571
-  console.assert(costBatch('SCL1-R', 0, 3, 0) === 571, 'Test1 failed');
-  // With already=2, qty=1 => floor(150 * 1.25^2) = floor(234.375) = 234
-  console.assert(costBatch('SCL1-R', 0, 1, 2) === 234, 'Test2 failed');
-  // Zero qty should be zero
-  console.assert(costBatch('V2-CTR', 5, 0, 10) === 0, 'Test3 failed');
-  // Non-zero qty, different miner/level
-  console.assert(typeof costBatch('IN5-AR', 9, 2, 1) === 'number', 'Test4 failed');
-  console.log('[Tests] Completed basic checks');
-})();
+    function decodeShare(str) {
+        try {
+            return JSON.parse(decodeURIComponent(escape(atob(str))));
+        } catch {
+            return null;
+        }
+    }
+
+    // Init
+    render();
+
+    // Buttons
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        localStorage.removeItem(storageKey);
+        render();
+    });
+    document.getElementById('shareBtn').addEventListener('click', () => {
+        const token = encodeShare();
+        const url = location.origin + location.pathname + '#' + token;
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Sharable link copied to clipboard!');
+        });
+    });
+
+    // Load from hash
+    if (location.hash && location.hash.length > 1) {
+        const data = decodeShare(location.hash.slice(1));
+        if (data) {
+            const lvl = document.getElementById('targetLevel');
+            const mapSel = document.getElementById('mapSelect');
+            if (lvl) lvl.value = clampLevel(Number(data.targetLevel || 0));
+            if (mapSel && data.map) mapSel.value = data.map;
+            for (const key of Object.keys(MINERS)) {
+                const inp = document.getElementById(`qty-${key}`);
+                if (inp && data.miners?.[key]) inp.value = String(Math.max(0, Math.round(Number(data.miners[key].qty || 0))));
+            }
+            saveState();
+            recalc();
+        }
+    }
+
+    // =============== Minimal Tests ===============
+    (function tests() {
+        // Upgrade tests (SCL1-R level1 means 0->1 base=150)
+        console.assert(upgradeCostFor('SCL1-R', 1, 1) === 150, 'U1 single');
+        console.assert(upgradeCostFor('SCL1-R', 1, 3) === (150 + Math.floor(150 * 1.25) + Math.floor(150 * 1.25 * 1.25)), 'U1 triple');
+        // Build tests (SCL1-R build=120)
+        console.assert(buildCostFor('SCL1-R', 1) === 120, 'B1 single');
+        console.assert(buildCostFor('SCL1-R', 3) === (120 + Math.floor(120 * 1.6) + Math.floor(120 * 1.6 * 1.6)), 'B1 triple');
+        console.log('[Tests] OK');
+    })();
 </script>
 </body>
 </html>
@@ -262,7 +570,7 @@ recalc();
 <!-- ===================== Dockerfile =====================
 FROM nginx:alpine
 COPY index.html /usr/share/nginx/html/index.html
+# Add local icons (optional). If using local images, place them alongside index.html in an /img folder.
+# COPY img/ /usr/share/nginx/html/img/
 EXPOSE 80
-# CMD provided by base image
 ======================================================== -->
-
