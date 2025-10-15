@@ -1,13 +1,3 @@
-<!--
-  Infinitode 2 Miner Calculator — Single Section, Common Target Level, Map Prefill, +/- Qty
-  - Target level numeric control (0..10) with +/- buttons.
-    * If target level == 0 → compute installation (build) price using +60% step-up per miner of same type (floored each step).
-    * If target level >= 1 → compute upgrade price from (level-1 → level) using +25% step-up per additional upgrade from that level (floored each step).
-  - One table with all miners (icons), Qty with -/+ buttons, Subtotal per miner, Grand total.
-  - Map selector including "custom". When a map is selected, prefill miner quantities from MAP_SUGGESTIONS; "custom" sets all qty to 0.
-  - LocalStorage persistence: targetLevel, selectedMap, per-miner qty.
-  - Minimal tests included (open DevTools console).
--->
 <!doctype html>
 <html lang="en">
 <head>
@@ -100,13 +90,6 @@
             border-color: var(--accent)
         }
 
-        .btn.primary {
-            background: linear-gradient(90deg, #22d3ee, #34d399);
-            border: none;
-            color: #0b0f16;
-            font-weight: 800
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -157,8 +140,7 @@
             display: flex;
             justify-content: flex-end;
             gap: 8px;
-            align-items: center;
-            margin-top: 12px
+            align-items: center
         }
 
         .sum .label {
@@ -192,14 +174,13 @@
         </div>
     </div>
 
+    <div class="card" id="totalTop">
+        <div class="sum"><span class="label">Grand total:</span> <span class="total" id="grandTotalTop">0</span></div>
+    </div>
+
     <div class="card" id="app"></div>
 
     <div class="card">
-        <div class="sum"><span class="label">Grand total:</span> <span class="total" id="grandTotal">0</span></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn" id="resetBtn">Reset</button>
-            <button class="btn primary" id="shareBtn">Share setup</button>
-        </div>
         <footer>
             <p>Rules: Install cost uses <b>+60%</b> multiplicative step-up per additional miner of the same type placed;
                 upgrade cost uses <b>+25%</b> multiplicative step-up per additional upgrade from the same level. Each
@@ -209,7 +190,6 @@
 </div>
 
 <script>
-    // =============== Data ===============
     const MINERS = {
         'SCL1-R': {
             build: 120,
@@ -237,14 +217,10 @@
             icon: 'https://static.wikia.nocookie.net/infinitode-2/images/9/9c/Miner-Infiar.png/revision/latest/scale-to-width-down/500?cb=20190325230255'
         },
     };
-    // If you prefer remote icons, swap src to absolute URLs and add referrerpolicy="no-referrer" on <img> in render()
+    const BUILD_STEP = 1.60;
+    const UPG_STEP = 1.25;
+    const fmt = n => n.toLocaleString(undefined, {maximumFractionDigits: 0});
 
-    const BUILD_STEP = 1.60;   // +60% per additional build of same miner
-    const UPG_STEP = 1.25;   // +25% per additional upgrade from same level
-    const fmt = (n) => n.toLocaleString(undefined, {maximumFractionDigits: 0});
-
-    // Maps list and suggested max quantities per miner.
-    // NOTE: Placeholder suggestions — please confirm/adjust. "custom" sets all to 0.
     const MAPS = [
         'custom',
         '1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8', '1.b1',
@@ -314,8 +290,7 @@
         'dev': {'SCL1-R': 0, 'V2-CTR': 0, 'MTRX-3': 3, 'TN4S-R': 5, 'IN5-AR': 8}
     };
 
-    // =============== Persistence ===============
-    const storageKey = 'inf2-miner-calc-v4';
+    const storageKey = 'inf2-miner-calc-v5';
 
     function saveState() {
         const data = {
@@ -338,239 +313,133 @@
         }
     }
 
-    // =============== Calculations ===============
     function clampLevel(n) {
         return Math.max(0, Math.min(10, isFinite(n) ? Math.round(n) : 0));
     }
 
-    function buildCostFor(minerKey, qty) {
-        const base = MINERS[minerKey].build;
-        let sum = 0;
-        for (let i = 0; i < qty; i++) sum += Math.floor(base * Math.pow(BUILD_STEP, i));
-        return sum;
+    function buildCostFor(k, q) {
+        const b = MINERS[k].build;
+        let s = 0;
+        for (let i = 0; i < q; i++) s += Math.floor(b * Math.pow(BUILD_STEP, i));
+        return s;
     }
 
-    function upgradeCostFor(minerKey, targetLevel, qty) {
-        // targetLevel in 1..10 → uses upgrades[targetLevel-1]
-        const base = MINERS[minerKey].upgrades[targetLevel - 1];
-        let sum = 0;
-        for (let i = 0; i < qty; i++) sum += Math.floor(base * Math.pow(UPG_STEP, i));
-        return sum;
+    function upgradeCostFor(k, l, q) {
+        const b = MINERS[k].upgrades[l - 1];
+        let s = 0;
+        for (let i = 0; i < q; i++) s += Math.floor(b * Math.pow(UPG_STEP, i));
+        return s;
     }
 
-    // =============== UI ===============
     function ensureMaps() {
-        const sel = document.getElementById('mapSelect');
-        if (!sel) return;
-        if (sel.options.length === 0) {
+        const s = document.getElementById('mapSelect');
+        if (!s) return;
+        if (s.options.length === 0) {
             MAPS.forEach(m => {
                 const o = document.createElement('option');
                 o.value = m;
                 o.textContent = m;
-                sel.appendChild(o);
+                s.appendChild(o);
             });
         }
     }
 
     function render() {
-        const state = loadState();
+        const st = loadState();
         ensureMaps();
-
-        const levelInput = document.getElementById('targetLevel');
+        const lvl = document.getElementById('targetLevel');
         const mapSel = document.getElementById('mapSelect');
-        levelInput.value = String(clampLevel(state?.targetLevel ?? 0));
-        mapSel.value = state?.map || 'custom';
-
+        lvl.value = String(clampLevel(st?.targetLevel ?? 0));
+        mapSel.value = st?.map || 'custom';
         const app = document.getElementById('app');
         app.innerHTML = '';
-
-        const table = document.createElement('table');
-        table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Miner</th>
-        <th>Qty</th>
-        <th>Subtotal</th>
-      </tr>
-    </thead>
-    <tbody id="minerBody"></tbody>
-  `;
-        app.appendChild(table);
-
-        const tbody = table.querySelector('#minerBody');
-        Object.keys(MINERS).forEach((key) => {
+        const t = document.createElement('table');
+        t.innerHTML = `<thead><tr><th>Miner</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody id="minerBody"></tbody>`;
+        app.appendChild(t);
+        const tb = t.querySelector('#minerBody');
+        Object.keys(MINERS).forEach(k => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-      <td class="icon-cell"><img referrerpolicy="no-referrer" src="${MINERS[key].icon}" alt="${key}" title="${key}"/> ${key}</td>
-      <td>
-        <div class="qty-ctrl">
-          <button class="btn" data-dec="${key}">−</button>
-          <input id="qty-${key}" type="number" min="0" step="1" value="0"/>
-          <button class="btn" data-inc="${key}">+</button>
-        </div>
-      </td>
-      <td><div id="sub-${key}" class="total">0</div></td>
-    `;
-            tbody.appendChild(tr);
-
-            // Restore qty
-            const q = Number(state?.miners?.[key]?.qty ?? 0);
-            tr.querySelector(`#qty-${key}`).value = q;
+            tr.innerHTML = `<td class="icon-cell"><img referrerpolicy="no-referrer" src="${MINERS[k].icon}" alt="${k}" title="${k}"/> ${k}</td><td><div class="qty-ctrl"><button class="btn" data-dec="${k}">−</button><input id="qty-${k}" type="number" min="0" step="1" value="0"/><button class="btn" data-inc="${k}">+</button></div></td><td><div id="sub-${k}" class="total">0</div></td>`;
+            tb.appendChild(tr);
+            const q = Number(st?.miners?.[k]?.qty ?? 0);
+            tr.querySelector(`#qty-${k}`).value = q;
         });
-
-        // Prefill by map selection
-        applyMapPrefill(mapSel.value, /*overwrite=*/false);
-
-        // Initial calc
+        applyMapPrefill(mapSel.value, false);
         recalc();
-
-        // Events
         document.getElementById('decLevel').addEventListener('click', () => {
-            levelInput.value = String(clampLevel(Number(levelInput.value) - 1));
+            lvl.value = String(clampLevel(Number(lvl.value) - 1));
             recalc();
             saveState();
         });
         document.getElementById('incLevel').addEventListener('click', () => {
-            levelInput.value = String(clampLevel(Number(levelInput.value) + 1));
+            lvl.value = String(clampLevel(Number(lvl.value) + 1));
             recalc();
             saveState();
         });
-        levelInput.addEventListener('input', () => {
-            levelInput.value = String(clampLevel(Number(levelInput.value)));
+        lvl.addEventListener('input', () => {
+            lvl.value = String(clampLevel(Number(lvl.value)));
             recalc();
             saveState();
         });
-
-        document.querySelectorAll('[data-dec]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const key = btn.getAttribute('data-dec');
-                const inp = document.getElementById(`qty-${key}`);
-                inp.value = String(Math.max(0, Number(inp.value || 0) - 1));
+        document.querySelectorAll('[data-dec]').forEach(b => {
+            b.addEventListener('click', () => {
+                const k = b.getAttribute('data-dec');
+                const i = document.getElementById(`qty-${k}`);
+                i.value = String(Math.max(0, Number(i.value || 0) - 1));
                 recalc();
                 saveState();
             });
         });
-        document.querySelectorAll('[data-inc]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const key = btn.getAttribute('data-inc');
-                const inp = document.getElementById(`qty-${key}`);
-                inp.value = String(Math.max(0, Number(inp.value || 0) + 1));
+        document.querySelectorAll('[data-inc]').forEach(b => {
+            b.addEventListener('click', () => {
+                const k = b.getAttribute('data-inc');
+                const i = document.getElementById(`qty-${k}`);
+                i.value = String(Math.max(0, Number(i.value || 0) + 1));
                 recalc();
                 saveState();
             });
         });
-        app.querySelectorAll('input[type="number"]').forEach(inp => {
-            inp.addEventListener('input', () => {
-                inp.value = String(Math.max(0, Math.round(Number(inp.value) || 0)));
+        app.querySelectorAll('input[type="number"]').forEach(i => {
+            i.addEventListener('input', () => {
+                i.value = String(Math.max(0, Math.round(Number(i.value) || 0)));
                 recalc();
                 saveState();
             });
         });
-
         mapSel.addEventListener('change', () => {
-            applyMapPrefill(mapSel.value, /*overwrite=*/true);
+            applyMapPrefill(mapSel.value, true);
             recalc();
             saveState();
         });
     }
 
-    function applyMapPrefill(map, overwrite) {
-        const caps = MAP_SUGGESTIONS[map];
-        if (!caps) return; // if not defined, do nothing
-        for (const key of Object.keys(MINERS)) {
-            const inp = document.getElementById(`qty-${key}`);
-            if (!inp) continue;
-            if (overwrite || Number(inp.value || 0) === 0) {
-                const v = Number(caps[key] ?? 0);
-                inp.value = String(Math.max(0, Math.round(v)));
+    function applyMapPrefill(m, o) {
+        const c = MAP_SUGGESTIONS[m];
+        if (!c) return;
+        for (const k of Object.keys(MINERS)) {
+            const i = document.getElementById(`qty-${k}`);
+            if (!i) continue;
+            if (o || Number(i.value || 0) === 0) {
+                const v = Number(c[k] ?? 0);
+                i.value = String(Math.max(0, Math.round(v)));
             }
         }
     }
 
     function recalc() {
-        const level = clampLevel(Number(document.querySelector('#targetLevel').value || 0));
-        let grand = 0;
-        for (const key of Object.keys(MINERS)) {
-            const qty = Number(document.querySelector(`#qty-${key}`).value || 0);
-            const sub = (level === 0) ? buildCostFor(key, qty) : upgradeCostFor(key, level, qty);
-            document.querySelector(`#sub-${key}`).textContent = fmt(sub);
-            grand += sub;
+        const l = clampLevel(Number(document.querySelector('#targetLevel').value || 0));
+        let g = 0;
+        for (const k of Object.keys(MINERS)) {
+            const q = Number(document.querySelector(`#qty-${k}`).value || 0);
+            const s = (l === 0) ? buildCostFor(k, q) : upgradeCostFor(k, l, q);
+            document.querySelector(`#sub-${k}`).textContent = fmt(s);
+            g += s;
         }
-        document.getElementById('grandTotal').textContent = fmt(grand) + ' (' + fmt(grand + 3334) + ')';
+        const top = document.getElementById('grandTotalTop');
+        if (top) top.textContent = fmt(g) + ' (' + fmt(g + 3334) + ')';
     }
 
-    // Share helpers
-    function encodeShare() {
-        const data = {
-            targetLevel: clampLevel(Number(document.querySelector('#targetLevel').value || 0)),
-            map: document.querySelector('#mapSelect').value,
-            miners: {}
-        };
-        for (const key of Object.keys(MINERS)) {
-            data.miners[key] = {qty: Number(document.querySelector(`#qty-${key}`).value || 0)};
-        }
-        return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-    }
-
-    function decodeShare(str) {
-        try {
-            return JSON.parse(decodeURIComponent(escape(atob(str))));
-        } catch {
-            return null;
-        }
-    }
-
-    // Init
     render();
-
-    // Buttons
-    document.getElementById('resetBtn').addEventListener('click', () => {
-        localStorage.removeItem(storageKey);
-        render();
-    });
-    document.getElementById('shareBtn').addEventListener('click', () => {
-        const token = encodeShare();
-        const url = location.origin + location.pathname + '#' + token;
-        navigator.clipboard.writeText(url).then(() => {
-            alert('Sharable link copied to clipboard!');
-        });
-    });
-
-    // Load from hash
-    if (location.hash && location.hash.length > 1) {
-        const data = decodeShare(location.hash.slice(1));
-        if (data) {
-            const lvl = document.getElementById('targetLevel');
-            const mapSel = document.getElementById('mapSelect');
-            if (lvl) lvl.value = clampLevel(Number(data.targetLevel || 0));
-            if (mapSel && data.map) mapSel.value = data.map;
-            for (const key of Object.keys(MINERS)) {
-                const inp = document.getElementById(`qty-${key}`);
-                if (inp && data.miners?.[key]) inp.value = String(Math.max(0, Math.round(Number(data.miners[key].qty || 0))));
-            }
-            saveState();
-            recalc();
-        }
-    }
-
-    // =============== Minimal Tests ===============
-    (function tests() {
-        // Upgrade tests (SCL1-R level1 means 0->1 base=150)
-        console.assert(upgradeCostFor('SCL1-R', 1, 1) === 150, 'U1 single');
-        console.assert(upgradeCostFor('SCL1-R', 1, 3) === (150 + Math.floor(150 * 1.25) + Math.floor(150 * 1.25 * 1.25)), 'U1 triple');
-        // Build tests (SCL1-R build=120)
-        console.assert(buildCostFor('SCL1-R', 1) === 120, 'B1 single');
-        console.assert(buildCostFor('SCL1-R', 3) === (120 + Math.floor(120 * 1.6) + Math.floor(120 * 1.6 * 1.6)), 'B1 triple');
-        console.log('[Tests] OK');
-    })();
 </script>
 </body>
 </html>
-
-<!-- ===================== Dockerfile =====================
-FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/index.html
-# Add local icons (optional). If using local images, place them alongside index.html in an /img folder.
-# COPY img/ /usr/share/nginx/html/img/
-EXPOSE 80
-======================================================== -->
